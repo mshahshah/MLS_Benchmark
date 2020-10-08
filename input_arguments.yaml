@@ -1,0 +1,42 @@
+# tree format
+design_setting:
+    topmodule: "dnn_LeNet"
+    #design_model : 'C1'
+    #design_model : 'F3'
+    #design_model : 'C1P1F1'
+    #design_model : 'C2P2F1'
+    #design_model : 'AlexNet'
+    design_model : 'LeNet'
+    #design_model : 'ConvNet'
+    #design_model : 'fast_LeNet'
+    #design_model : 'dnn_custom'
+    solution_name: "ip_test"
+    create_ip: False
+    run_vivado_synthesize: False
+    run_vivado_power_analyzer: False
+    vivado_version: vitis
+    syn_label: any
+
+    DSE_setting:
+        solution_counts: 2
+        max_parallel_syn: 3
+        dse_name: unknown
+        directive_selection: random
+        #directive_selection: order
+        copy_bc_files: True
+        clock_range:
+            min: 80
+            max: 250
+            samples: 6
+        dtype_range:
+            in_t: [8,16,32]
+            ker_t: [8,12,16]
+            res_t: [16]
+            all_variables: [8,12,16,24,32]
+
+FPGA:
+    chip: VC707
+    clock_period : 8
+    dsp_max: 2000
+
+
