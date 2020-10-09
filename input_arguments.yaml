@@ -1,25 +1,18 @@
 # tree format
 design_setting:
     topmodule: "dnn_LeNet"
-    #design_model : 'C1'
-    #design_model : 'F3'
-    #design_model : 'C1P1F1'
-    #design_model : 'C2P2F1'
-    #design_model : 'AlexNet'
-    design_model : 'LeNet'
-    #design_model : 'ConvNet'
-    #design_model : 'fast_LeNet'
-    #design_model : 'dnn_custom'
+    design_model : 'ave_8'
+
     solution_name: "ip_test"
-    create_ip: False
-    run_vivado_synthesize: False
-    run_vivado_power_analyzer: False
+    create_ip: True
+    run_vivado_synthesize: True
+    run_vivado_power_analyzer: True
     vivado_version: vitis
     syn_label: any
 
     DSE_setting:
         solution_counts: 2
-        max_parallel_syn: 3
+        max_parallel_syn: 1
         dse_name: unknown
         directive_selection: random
         #directive_selection: order

@@ -3,12 +3,55 @@ import csv, time
 from shutil import copyfile
 import sys, glob, json, random, pickle
 import numpy as np
-import yaml, random
+import yaml, random, logging
+from datetime import datetime
 import subprocess
-from dnn_tools import *
 import pandas as pd
 import pprint
 import xml.etree.ElementTree as ET
+from utils import *
+import concurrent.futures
+
+
+class utils():
+    def __init__(self,cfg):
+        self.hello=0
+        self.cfg = cfg
+    def record_time(self):
+        return time.time()
+
+    def end_and_print_time(self,start_time):
+        syn_time = time.time() - start_time
+        min, sec = divmod(syn_time, 60)
+        #print("PYTHON : Total synthesis time : {:3d} Minutes and {:2d} Seconds".format(int(min), int(sec)))
+        return [int(min), int(sec)]
+
+    def end_and_print_time_and_label(self,start_time, label):
+        syn_time = time.time() - start_time
+        min, sec = divmod(syn_time, 60)
+        if min == 0 and sec < 1:
+            print("TIME : {} in {:3d}M : {:2d}S : {:5.2f}mS ".format(label, int(min), int(sec), float(syn_time*1000)))
+        else:
+            print("TIME : {} in {:3d}M : {:2d}S".format(label, int(min), int(sec)))
+        return round(min), round(sec)
+
+    def save_a_variable(self,fname,variable):
+        with open(os.path.join(self.cfg.paths.dse_report,'{}.pickle'.format(fname)), 'wb') as f:
+            pickle.dump(variable, f)
+
+    def load_a_variable(self,variable_name):
+        with open(os.path.join(self.cfg.paths.dse_report,'{}.pickle'.format(variable_name)), 'rb') as f:
+            variable = pickle.load(f)
+        return variable
+
+    def save_list_to_file(self,filename,data):
+        with open(filename, 'w') as f:
+            for line in data:
+                f.write("%s\n" % line)
+
+    def load_file_to_list(self,filename):
+        with open(filename, 'r') as reader:
+            return reader.readlines()
 
 
 class configure_design:
@@ -31,28 +74,20 @@ class configure_design:
         # [self.paths, self.files] = self.create_paths()
         self.cfg = Struct(**cfg)
         cfg.update(t1)
-        t3 = {}
-        t3['analyze_results'] = {}
-        cfg.update(t3)
         self.cfg = Struct(**cfg)
         return self.cfg
 
     def parse_yaml_design_arguments(self):
         datamap_dict = {}
-        with open('src/{}.yaml'.format(self.cfg.design_setting.design_model)) as f:
+        with open('{}/design_cfg.yaml'.format(self.cfg.design_setting.design_model)) as f:
             datamap = yaml.safe_load(f)
             datamap = Struct(**datamap)
             datamap_dict['design'] = Struct(**datamap.design)
-            datamap_dict['design_layers'] = datamap.design_layers
-            datamap_dict['design_variable_types'] = datamap.design_variable_types
             datamap_dict['pragmas'] = {}
-            datamap_dict['pragmas']['variable'] = datamap.pragmas
-            datamap_dict['pragmas']['custom'] = datamap.custom_pragma_list
             datamap_dict['pragmas']['best'] = datamap.best_pragma_list
             datamap_dict['pragmas']['base'] = datamap.base_pragma_list
             datamap_dict['pragmas']['minimal'] = datamap.minimal_pragma_list
             datamap_dict['pragmas']['none'] = datamap.none
-            datamap_dict['interface'] = datamap.interface
         return datamap_dict
 
     def parse_yaml_input_arguments(self):
@@ -86,46 +121,32 @@ class configure_design:
         files={}
         paths['design_top'] = os.getcwd()
         paths['design_model'] = os.path.join(paths['design_top'], self.cfg.design_setting.design_model)
-        paths['python'] = os.path.join(paths['design_top'], 'dnn_python')
         paths['hls'] = os.path.join(paths['design_model'], 'hls')
         paths['solution'] = os.path.join(paths['hls'], self.cfg.design_setting.solution_name)
-        paths['directive_list'] = os.path.join(paths['design_model'], self.cfg.design_setting.solution_name + '_sol_list')
-        paths['hw'] = os.path.join(paths['design_model'], 'dnn_hw')
-        paths['src'] = os.path.join(paths['design_top'], 'src')
-        paths['test_data'] = os.path.join(paths['design_top'], 'test_data')
-        paths['dse'] = os.path.join(paths['design_model'], 'dnn_DSE')
+        paths['directive_list'] = os.path.join(paths['design_model'], 'directive_list')
+        paths['src'] = os.path.join(paths['design_model'], 'src')
         paths['report'] = os.path.join(paths['design_model'], 'reports')
-        paths['test_files'] = os.path.join(paths['design_model'], 'test_files')
-        paths['ml_dataset'] = os.path.join(paths['design_top'], 'training_dataset')
-        #paths['dse_report'] = os.path.join(paths['report'], self.cfg.design_setting.DSE_setting['dse_name'])
         mode = '_'.join(self.options.mode.split('_')[0:2])
         if mode == 'syn':
             rpt_path_name = 'syn'
-        elif mode in ['dse_pragma', 'dse_universal']:
+        elif mode in ['dse_pragma']:
             rpt_path_name = mode+ str(self.cfg.design_setting.DSE_setting['solution_counts']) +\
                             self.cfg.design_setting.DSE_setting['directive_selection'] +\
                             '_' + self.cfg.design_setting.DSE_setting['dse_name']
-        elif mode in ['dse_clock', 'dse_dtype', 'dse_cfg']:
+        elif mode in ['dse_clock', 'dse_dtype']:
             rpt_path_name = mode + '_' + self.cfg.design_setting.syn_directive_type +\
                 '_' + self.cfg.design_setting.DSE_setting['dse_name']
         else:
             rpt_path_name = 'unknown_report'
 
-        paths['dse_report'] = os.path.join(paths['report'], rpt_path_name)
+        paths['dse_report'] = os.path.join(paths['report'])
         paths['dse_figures'] = os.path.join(paths['dse_report'],  'figures')
-        paths['dnn_weights'] = os.path.join(paths['design_model'], 'dnn_weights')
         files['synLogFile'] = os.path.join(paths['solution'] , '{}.log'.format(self.cfg.design_setting.solution_name))
         files['SolutionFile'] = os.path.join(paths['solution'], '{}_data.json'.format(self.cfg.design_setting.solution_name))
         files['DirectiveFile'] = os.path.join(paths['solution'], 'directives.tcl')
         files['TopModuleRptFile'] = os.path.join(paths['solution'],'syn','report','{}_csynth.rpt'.format(self.cfg.design_setting.topmodule))
         files['user_defined_arguments'] = os.path.join( 'input_arguments.yaml')
         files['user_defined_layers'] = os.path.join(paths['src'],'user_defined_layers.yaml')
-        files['dnn_cfg_cppfile'] = os.path.join(paths['design_model'], 'dnn_configs.h')
-        files['dnn_main_cppfile'] = os.path.join(paths['design_model'], 'top.cpp')
-        files['dnn_main_hfile'] = os.path.join(paths['design_model'], 'top.h')
-
-        files['trained_model_weights_float'] = os.path.join(paths['dnn_weights'], 'model_weights_float')
-        files['trained_model_weights_fixed'] = os.path.join(paths['dnn_weights'], 'model_weights_fixed')
         self.paths = Struct(**paths)
         self.files = Struct(**files)
         return Struct(**paths) , Struct(**files)
@@ -138,32 +159,19 @@ class configure_design:
                     shutil.copy(file, self.paths.design_model)
 
     def prepare_design(self, cleaning = False):
-        if self.options.mode in ['','syn_report', 'dse_pragma_report','dse_dtype_report','dse_clock_report','dse_universal_report','dse_variable_report', 'dse_cfg_report']:
+        if self.options.mode in ['','syn_report', 'dse_pragma_report','dse_dtype_report','dse_clock_report']:
             return
-        elif self.options.mode in ['dse_pragma','dse_clock', 'syn','dse_dtype','dse_universal','dse_variable', 'dse_cfg']:
+        elif self.options.mode in ['dse_pragma','dse_clock', 'syn','dse_dtype']:
             if self.cfg.design_setting.run_vivado_power_analyzer: #force vivado synthesizer if power is asked
                 self.cfg.design_setting.run_vivado_synthesize = True
 
-            self.copy_design_source_files(['h', 'cpp'])
             if os.path.exists(self.cfg.paths.solution):
                 shutil.rmtree(self.cfg.paths.solution)
                 os.makedirs(self.cfg.paths.solution)
             else:
                 os.makedirs(self.cfg.paths.solution)
 
-            if not os.path.exists(self.cfg.paths.test_files):
-                os.makedirs(self.cfg.paths.test_files)
-            else:
-                shutil.rmtree(self.cfg.paths.test_files)
-                os.makedirs(self.cfg.paths.test_files)
-
             if self.options.mode not in ['syn']:
-                if not os.path.exists(self.cfg.paths.directive_list):
-                    os.makedirs(self.cfg.paths.directive_list)
-                else:
-                    shutil.rmtree(self.cfg.paths.directive_list)
-                    os.makedirs(self.cfg.paths.directive_list)
-
                 if os.path.exists(self.cfg.paths.dse_report):
                     print("PYTHON : The report folder exist. choose another DSE report folder name!")
                     #exit()
@@ -200,14 +208,13 @@ class hls_tools():
         tcl_lines.append("## This file is generated automatically by python tool")
         tcl_lines.append("############################################################")
         tcl_lines.append('puts \"CMD : run_hls_syn.tcl is running!\"')
-        tcl_lines.append('set sol_name [lindex  $argv 2 ]')
-        tcl_lines.append('open_project hls$sol_name')
-        tcl_lines.append('set_top   {}'.format(self.cfg.design_setting.topmodule))
+        tcl_lines.append('open_project hls')
+        tcl_lines.append('set_top   {}'.format(self.cfg.design.top_function))
         for file in self.cfg.design.source_files:
-            tcl_lines.append('add_files  {}'.format(file))
+            tcl_lines.append('add_files  src/{}'.format(file))
 
         for file in self.cfg.design.tb_files:
-            tcl_lines.append('add_files  -tb {}'.format(file))
+            tcl_lines.append('add_files  -tb src/{}'.format(file))
         if self.cfg.design_setting.vivado_version == 'vitis':
             tcl_lines.append('open_solution -reset \"{}\"  -flow_target vivado'.format(self.cfg.design_setting.solution_name))
             tcl_lines.append('set_part {' + self.cfg.FPGA.part + '}')
@@ -216,10 +223,7 @@ class hls_tools():
             tcl_lines.append('set_part {' + self.cfg.FPGA.part + '} -tool vivado')
         tcl_lines.append('create_clock -period {} -name default'.format(clock_period))
         tcl_lines.append('set_clock_uncertainty 12.5%')
-        if self.cfg.run_options.mode == 'dse_pragma':
-            tcl_lines.append('source \"ip_test_sol_list/solution_$sol_name.tcl\"')
-        else:
-            tcl_lines.append('source \"./hls/{}/directives.tcl\"'.format(self.cfg.design_setting.solution_name))
+        tcl_lines.append('source \"./hls/{}/directives.tcl\"'.format(self.cfg.design_setting.solution_name))
 
         tcl_lines.append('csynth_design')
         if self.cfg.design_setting.run_vivado_synthesize:
@@ -236,13 +240,9 @@ class hls_tools():
 
     def run_power_analyzer(self, sol_counter, mode, print_out='silent', clean=False):
         if not self.cfg.design_setting.run_vivado_power_analyzer:
-            return 'NP', {'LUT_PS': 'NP', 'FF_PS': 'NP', 'DSP_PS': 'NP', 'BRAM_PS': 'NP'}
+            return {'LUT_PS': 'NP', 'FF_PS': 'NP', 'DSP_PS': 'NP', 'BRAM_PS': 'NP', 'Timing_PS': 'NF','power': 'NP'}
 
-        if self.cfg.run_options.mode == 'dse_pragma':
-            dest_path = os.path.join(self.cfg.paths.design_model, 'hls{}'.format(sol_counter),
-                                     self.cfg.design_setting.solution_name)
-        else:
-            dest_path = self.cfg.paths.solution
+        dest_path = self.cfg.paths.solution
 
         if not os.path.exists(os.path.join(dest_path, 'impl')):
             return 'Er'
@@ -250,7 +250,7 @@ class hls_tools():
         impl_file = ['power_analyzer.tcl',
                      'run_power_analyzer.bat']
         for fname in impl_file:
-            srcfile = os.path.join(self.cfg.paths.src, fname)
+            srcfile = os.path.join(self.cfg.paths.design_top, fname)
             destfile = os.path.join(dest_path, 'impl', fname)
             shutil.copyfile(srcfile, destfile)
         os.chdir(os.path.join(dest_path, 'impl'))
@@ -328,33 +328,6 @@ class hls_tools():
         return datamap
 
 
-    def create_fixed_directive_tcl_file(self, directive_type):
-
-        ctrl_intf = {'hs': "set_directive_interface -mode ap_ctrl_hs \"{}\"".format(self.cfg.design_setting.topmodule),
-        'none': "set_directive_interface -mode ap_ctrl_none \"{}\"".format(self.cfg.design_setting.topmodule),
-        'axi':"set_directive_interface -mode s_axilite \"{}\"".format(self.cfg.design_setting.topmodule)}
-
-        tcl_lines = []
-        tcl_lines.append("############################################################")
-        tcl_lines.append(
-            "## This file is generated automatically by dnn tool. This is {} Solution.".format(directive_type))
-        tcl_lines.append("############################################################")
-
-        tcl_lines.append(ctrl_intf.get(self.cfg.design.module_controller,''))
-
-        for intf in self.cfg.interface[self.cfg.design.data_interface]:
-            tcl_lines.append(intf)
-
-        if not self.cfg.pragmas[directive_type] == None:
-            for item in self.cfg.pragmas[directive_type]:
-                if item is not None:
-                    tcl_lines.append(item)
-
-        if self.cfg.design.dataflow:
-            tcl_lines.append('\nset_directive_dataflow    \"{}\"'.format(self.cfg.design_setting.topmodule))
-        filename = os.path.join(self.cfg.paths.solution, "directives.tcl")
-        self.utils.save_list_to_file(filename, tcl_lines)
-
     def read_impl_results(self, sol_path):
         try:
             power_rptFile = os.path.join(sol_path, 'impl', 'verilog', 'report', 'rpt_power.xml')
@@ -364,19 +337,26 @@ class hls_tools():
             power = 'NF'
 
         try:
-            utilization_rptFile = os.path.join(sol_path, 'impl', 'report', 'verilog', 'dnn_LeNet_export.xml')
+            utilization_rptFile = os.path.join(sol_path, 'impl', 'report', 'verilog', '{}_export.xml'.format(self.cfg.design.top_function))
             tree = ET.parse(utilization_rptFile)
             root = tree.getroot()
-            PR_utilzation = {i.tag+'_PS': i.text for i in root[0][0]}
-            PR_utilzation.pop('SLICE_PS')
-            PR_utilzation.pop('SRL_PS')
-            print('Post Syn hardware utilization : ', PR_utilzation)
+            PR_results = {i.tag+'_PS': i.text for i in root[0][0]}
+            PR_results['Timing_PS'] = root[1][1].text
+            PR_results['power'] = power
+            PR_results.pop('SLICE_PS')
+            PR_results.pop('SRL_PS')
+            print('Post Syn hardware utilization : ', PR_results)
         except:
-            PR_utilzation = {'LUT_PS': 'NF', 'FF_PS': 'NF', 'DSP_PS': 'NF', 'BRAM_PS': 'NF'}
-        return power, PR_utilzation
+            PR_results = {'LUT_PS': 'NF', 'FF_PS': 'NF', 'DSP_PS': 'NF', 'BRAM_PS': 'NF', 'Timing_PS':'NF','power': 'NF'}
+
+
+        return  PR_results
+
+
+
 
     def read_parallel_syn_results(self, solution_num, syn_exec_time, print_out=False):
-        file = os.path.join(self.cfg.paths.design_model,'hls{}'.format(solution_num),self.cfg.design_setting.solution_name,
+        file = os.path.join(self.cfg.paths.design_model,'hls', self.cfg.design_setting.solution_name,
                                 '{}_data.json'.format(self.cfg.design_setting.solution_name))
         try:
             with open(file) as json_file:
@@ -391,7 +371,7 @@ class hls_tools():
                 passed_sol['syn_time'] = '{:3d}:{:2d}'.format(syn_exec_time[0], syn_exec_time[1])
                 json_file.close()
                 if print_out:
-                    pprint.pprint(passed_sol[self.cfg.design_setting.topmodule], depth=5)
+                    pprint.pprint(passed_sol[self.cfg.design.top_function], depth=5)
 
         except IOError:
             passed_sol = {}
@@ -453,71 +433,39 @@ class hls_tools():
                     exec_us = (float(temp[p_id][key]["LatencyWorst"])) * float(temp[p_id]["Timing"]["Target"]) / pow(10, 3)
                     syn_rslt_summary[p_id]['exec us'] = str(round(exec_us, 2))
                     syn_rslt_summary[p_id]['clock period'] = float(temp[p_id]["Timing"]["Target"])
-                    syn_rslt_summary[p_id]['FPS'] = int(pow(10, 6)/exec_us)
-                    if topmodule == p_id:
-                        total_OP = self.cfg.analyze_results[topmodule].get('ops', 0)
-                        syn_rslt_summary[p_id]['ratio'] = round(self.cfg.analyze_results[topmodule]['ops'] /
-                                                                int(syn_rslt_summary[p_id]['latency']), 2)
-                    else:
-                        total_OP = 0
-                        syn_rslt_summary[p_id]['ratio'] = 0
-                    syn_rslt_summary[p_id]['OP'] = total_OP
-                    syn_rslt_summary[p_id]['GOPS'] = round(total_OP / (exec_us * pow(10, 3)), 3)
-
-                elif key == "Loops" and key in keys:
-                    for II in temp[p_id][key]:
-                        syn_rslt_summary[p_id]['II {}'.format(II["Name"])] = II["PipelineII"]
+                    syn_rslt_summary[p_id]['Timing'] = float(temp[p_id]["Timing"]["Estimate"])
         return syn_rslt_summary
 
     def extract_hls_json_info_vitis(self, json_data):
         syn_rslt_summary = {}
         keys = ['Area', 'Latency']
         temp = json_data["ModuleInfo"]["Metrics"]
-        topmodule = self.cfg.design_setting.topmodule
-        new_temp = {}
-        for i in temp.keys():
-            if i == self.cfg.design_setting.topmodule:
-                new_label = i
-            else:
-                new_label = '_'.join(i.split('_')[0:2]+[i.split('_')[-3]])
-            new_temp[new_label] = temp[i]
-        for p_id, p_info in new_temp.items():
+        topmodule = self.cfg.design.top_function
+
+        for p_id, p_info in temp.items():
             syn_rslt_summary[p_id] = {}
             # print("\nModule name:", p_id)
             for key in p_info:
                 if key == "Area" and key in keys:
                     a = syn_rslt_summary[p_id]['BRAM %'] = str(
-                        round(int(new_temp[p_id][key]["BRAM_18K"]) / int(new_temp[p_id][key]["AVAIL_BRAM"]) * 100, 2))
-                    syn_rslt_summary[p_id]['BRAM'] = new_temp[p_id][key]["BRAM_18K"]
+                        round(int(temp[p_id][key]["BRAM_18K"]) / int(temp[p_id][key]["AVAIL_BRAM"]) * 100, 2))
+                    syn_rslt_summary[p_id]['BRAM'] = temp[p_id][key]["BRAM_18K"]
                     b = syn_rslt_summary[p_id]['LUT %'] = str(
-                        round(int(new_temp[p_id][key]["LUT"]) / int(new_temp[p_id][key]["AVAIL_LUT"]) * 100, 2))
-                    syn_rslt_summary[p_id]['LUT'] = new_temp[p_id][key]["LUT"]
-                    c = syn_rslt_summary[p_id]['FF %'] = str(round(int(new_temp[p_id][key]["FF"]) / int(new_temp[p_id][key]["AVAIL_FF"]) * 100, 2))  # ...
-                    syn_rslt_summary[p_id]['FF'] = new_temp[p_id][key]["FF"]
-                    syn_rslt_summary[p_id]['DSP'] = new_temp[p_id][key]["DSP"]
+                        round(int(temp[p_id][key]["LUT"]) / int(temp[p_id][key]["AVAIL_LUT"]) * 100, 2))
+                    syn_rslt_summary[p_id]['LUT'] = temp[p_id][key]["LUT"]
+                    c = syn_rslt_summary[p_id]['FF %'] = str(round(int(temp[p_id][key]["FF"]) / int(temp[p_id][key]["AVAIL_FF"]) * 100, 2))  # ...
+                    syn_rslt_summary[p_id]['FF'] = temp[p_id][key]["FF"]
+                    syn_rslt_summary[p_id]['DSP'] = temp[p_id][key]["DSP"]
                     d = syn_rslt_summary[p_id]['DSP %'] = str(
-                        round(int(new_temp[p_id][key]["DSP"]) / int(new_temp[p_id][key]["AVAIL_DSP"]) * 100, 2))
+                        round(int(temp[p_id][key]["DSP"]) / int(temp[p_id][key]["AVAIL_DSP"]) * 100, 2))
                     syn_rslt_summary[p_id]['Total %'] = str(round(
                         (float(a) + float(b) + float(c) + float(d)) / 4, 2))
                 elif key == "Latency" and key in keys:
-                    syn_rslt_summary[p_id]['latency'] = str(new_temp[p_id][key]["LatencyWorst"])
-                    exec_us = (float(new_temp[p_id][key]["LatencyWorst"])) * float(new_temp[p_id]["Timing"]["Target"]) / pow(10, 3)
+                    syn_rslt_summary[p_id]['latency'] = str(temp[p_id][key]["LatencyWorst"])
+                    exec_us = (float(temp[p_id][key]["LatencyWorst"])) * float(temp[p_id]["Timing"]["Target"]) / pow(10, 3)
                     syn_rslt_summary[p_id]['exec us'] = str(round(exec_us, 2))
-                    syn_rslt_summary[p_id]['clock period'] = float(new_temp[p_id]["Timing"]["Target"])
-                    syn_rslt_summary[p_id]['FPS'] = int(pow(10, 6)/exec_us) if exec_us != 0 else 'NA'
-                    if topmodule == p_id:
-                        total_OP = self.cfg.analyze_results[topmodule].get('ops', 0)
-                        syn_rslt_summary[p_id]['ratio'] = round(self.cfg.analyze_results[topmodule]['ops'] /
-                                                                int(syn_rslt_summary[p_id]['latency']), 2)
-                    else:
-                        total_OP = 0
-                        syn_rslt_summary[p_id]['ratio'] = 0
-                    syn_rslt_summary[p_id]['OP'] = total_OP
-                    syn_rslt_summary[p_id]['GOPS'] = round(total_OP / (exec_us * pow(10, 3)), 3) if exec_us != 0 else 'NA'
-
-                elif key == "Loops" and key in keys:
-                    for II in new_temp[p_id][key]:
-                        syn_rslt_summary[p_id]['II {}'.format(II["Name"])] = II["PipelineII"]
+                    syn_rslt_summary[p_id]['clock period'] = float(temp[p_id]["Timing"]["Target"])
+                    syn_rslt_summary[p_id]['Timing'] = float(temp[p_id]["Timing"]["Estimate"])
         return syn_rslt_summary
 
 
@@ -574,6 +522,153 @@ class hls_tools():
             txtlines.append(temp)
         self.utils.save_list_to_file(record_file+'.txt', txtlines)
 
+
+class MLS_Benchmark():
+    def __init__(self,cfg):
+        self.cfg = cfg
+        self.hls_tools = hls_tools(cfg)
+        self.utils = utils(cfg)
+
+
+    def read_dse_syn_results(self, syn_exec_time, print_out = False):
+        solution_syn_list = []
+        for solNum, file in enumerate(glob.glob(self.cfg.paths.directive_list + "/" + "*.json")):
+            try:
+                with open(file) as json_file:
+                    json_data = json.load(json_file)
+                    passed_sol = self.extract_hls_json_info(json_data)
+                    passed_sol['solution'] = re.findall(r'\w+',file)[-2]
+                    passed_sol['syn_status'] = 'passed'
+                    passed_sol['syn_time'] = '{:3d}:{:2d}'.format(syn_exec_time[solNum][0],syn_exec_time[solNum][1])
+                    solution_syn_list.append(passed_sol)
+                    json_file.close()
+            except IOError:
+                print("PYTHON : can't open {} file".format(file))
+        return solution_syn_list
+
+    def load_a_directive(self, sol_counter):
+        selection_type = self.cfg.design_setting.DSE_setting['directive_selection']
+        directive_name = 'untimate_new_directive{}.tcl'.format(sol_counter)
+        srf_file = os.path.join(self.cfg.paths.directive_list,directive_name)
+        shutil.copyfile(srf_file, self.cfg.files.DirectiveFile)
+
+    def parallel_dse_pragma(self, sol_counter):
+        target_solution = self.selected_solutions[sol_counter]
+        syn_path = os.path.join(self.cfg.paths.design_model, 'hls', self.cfg.design_setting.solution_name)
+        start_time = self.utils.record_time()
+        now = datetime.now()
+        dt_string = now.strftime("%d/%m/%Y %H:%M:%S")
+        print("PYTHON : DSE on pragmas: Synthesis of design {} is started at {}.".format(sol_counter, dt_string))
+        self.load_a_directive(sol_counter)
+        self.hls_tools.create_syn_tcl_file(clock_period=self.cfg.FPGA.clock_period)
+        os.chdir(self.cfg.paths.design_model)
+        if self.cfg.design_setting.vivado_version == 'vitis':
+            os.system("vitis_hls -f run_hls_syn.tcl {} > {}/syn_report{}.log"
+                      .format(target_solution, self.cfg.paths.dse_report, target_solution))
+        else:
+            os.system("vivado_hls -f run_hls_syn.tcl {} > syn_report{}.log".format(sol_counter, sol_counter))
+
+        beep('syn')
+        self.copy_solution_files(syn_path, self.cfg.design_setting.DSE_setting['dse_name'], sol_counter)
+        self.hls_tools.copy_hls_bc_files(syn_path, sol_counter)
+
+        [mm, ss] = self.utils.end_and_print_time(start_time)
+        temp, model_layers_name =  self.hls_tools.read_parallel_syn_results(sol_counter, [mm, ss], False)
+        temp['dtype'] = '{} bits'.format(self.cfg.design_variable_types['ker_t'])
+        temp['power'] = self.hls_tools.read_single_syn_results(sol_counter, 'syn', print_out='silent', clean=True)
+        print("PYTHON : DSE on pragmas: Synthesis of design {} is finished. Synthesis time : {:3d} Minutes and {:2d} Seconds"
+              .format(sol_counter, mm, ss))
+        os.chdir(self.cfg.paths.design_top)
+        self.utils.save_a_variable('solution_{}'.format(sol_counter), temp)
+        return temp, model_layers_name
+
+    def create_dse_excel_report(self, design_solutions,  sort1_by='latency', sort2_by='DSP'):
+        design_solutions_passed = []
+        top_function = self.cfg.design.top_function
+        for solution in design_solutions:
+            if solution['syn_status'] == 'passed':
+                design_solutions_passed.append(solution)
+        filename = os.path.join(self.cfg.paths.dse_report, "dse_{}.csv".format(top_function))
+        sorted_solutions = sorted(design_solutions_passed, key=lambda x: (float(x[top_function][sort1_by]),int(x[top_function][sort2_by])))
+
+        labels_list = list(sorted_solutions[0]['ave8'].keys())
+
+        f = open(filename, "w+")
+        for item in list(sorted_solutions[0].keys())[1:]:
+            f.write('{},'.format(item))
+        for item in labels_list:
+            f.write(item + ',')
+        f.write('\n')
+
+        for indx, solution in enumerate(sorted_solutions, start=1):
+            if solution['syn_status'] == 'failed':
+                f.write(str(solution['solution']) + ',')
+                f.write(solution['syn_status'] + ',')
+                f.write(solution['syn_time'] + ',')
+            else:
+                for i in list(solution.keys())[1:]:
+                    f.write(str(solution[i]) + ',')
+                for key in labels_list:
+                    if key in solution[top_function]:
+                        f.write(str(solution[top_function][key]) + ',')
+                    else:
+                        f.write('NA ,')
+
+            f.write('\n')
+        f.close()
+        print('\nPYTHON : DSE: Summary of {} {} DSE is created in the report directory!'.format(top_function,indx))
+
+
+
+    def run_dse_pragma(self, options):
+        if options.mode == 'dse_pragma_report':
+            print("PYTHON : DSE Skipped")
+        else:
+            solution_syn_list = []
+            total_dse_solutions = self.cfg.design_setting.DSE_setting['solution_counts']
+
+            if self.cfg.design_setting.DSE_setting['directive_selection'] == 'random':
+                selected_solutions = np.random.randint(0, 20, total_dse_solutions).tolist()
+            else:
+                selected_solutions = range(total_dse_solutions)
+
+            format = "%(asctime)s: %(message)s"
+            logging.basicConfig(format=format, level=logging.INFO, datefmt="%H:%M:%S")
+            dt_string = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+
+            for sol in selected_solutions:
+                syn_path = os.path.join(self.cfg.paths.design_model, 'hls', self.cfg.design_setting.solution_name)
+                start_time = self.utils.record_time()
+                now = datetime.now()
+                dt_string = now.strftime("%d/%m/%Y %H:%M:%S")
+                print("PYTHON : DSE on pragmas: Synthesis of design {} is started at {}.".format(sol, dt_string))
+                self.load_a_directive(sol)
+                self.hls_tools.create_syn_tcl_file(clock_period=self.cfg.FPGA.clock_period)
+                os.chdir(self.cfg.paths.design_model)
+                if self.cfg.design_setting.vivado_version == 'vitis':
+                    os.system("vitis_hls -f run_hls_syn.tcl {} > reports/syn_report{}.log".format(sol, sol))
+                else:
+                    os.system("vivado_hls -f run_hls_syn.tcl {} > reports/syn_report{}.log".format(sol, sol))
+
+                beep('syn')
+                #self.copy_solution_files(syn_path, self.cfg.design_setting.DSE_setting['dse_name'], sol)
+                self.hls_tools.copy_hls_bc_files(syn_path, sol)
+
+                [mm, ss] = self.utils.end_and_print_time(start_time)
+                temp, model_layers_name = self.hls_tools.read_parallel_syn_results(sol, [mm, ss], False)
+                temp.update(self.hls_tools.run_power_analyzer(sol, 'syn', print_out='silent', clean=True))
+                temp['dtype'] = '{} bits'.format('NA')
+                print("PYTHON : DSE on pragmas: Synthesis of design {} is finished. Synthesis time : {:3d} Minutes and {:2d} Seconds"
+                    .format(sol, mm, ss))
+                os.chdir(self.cfg.paths.design_top)
+                self.utils.save_a_variable('solution_{}'.format(sol), temp)
+                solution_syn_list.append(temp)
+
+            self.utils.save_a_variable('dse_pragma_results', solution_syn_list)
+            #self.remove_all_synthesize_results(total_dse_solutions)
+            [mm, ss] = self.utils.end_and_print_time(start_time)
+            print("PYTHON : Total synthesis time : {:3d} Minutes and {:2d} Seconds".format(mm, ss))
+        return solution_syn_list
 
 
 
