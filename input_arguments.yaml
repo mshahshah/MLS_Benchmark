@@ -1,7 +1,7 @@
 # tree format
 design_setting:
-    design_model : 'ave_8'
-    #design_model : 'adpcm'
+    #design_model : 'ave_8'
+    design_model : 'adpcm'
     #design_model : 'dfadd'
     #design_model : 'dfdiv'
     #design_model : 'dfsin'
@@ -9,13 +9,13 @@ design_setting:
     #design_model : 'blowfish_new'
 
     solution_name: "ip_test"
-    #run_vivado_synthesize: True
-    #run_vivado_power_analyzer: True
-    run_vivado_synthesize: False
-    run_vivado_power_analyzer: False
+    run_vivado_synthesize: True
+    run_vivado_power_analyzer: True
+    #run_vivado_synthesize: False
+    #run_vivado_power_analyzer: False
     vivado_version: vitis
 
-    solution_counts: 1
+    solution_counts: 200
     dse_name: unknown
     copy_bc_files: True
     clock_range:
@@ -30,6 +30,4 @@ design_setting:
 
 FPGA:
     chip: VC707
-    clock_period : 8
-
-
+    clock_period : 10

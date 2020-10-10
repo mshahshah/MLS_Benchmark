@@ -434,8 +434,9 @@ class hls_tools():
                     syn_rslt_summary[p_id]['Total %'] = str(round(
                         (float(a) + float(b) + float(c) + float(d)) / 4, 2))
                 elif key == "Latency" and key in keys:
-                    syn_rslt_summary[p_id]['latency'] = str(temp[p_id][key]["LatencyWorst"])
-                    exec_us = (float(temp[p_id][key]["LatencyWorst"])) * float(temp[p_id]["Timing"]["Target"]) / pow(10, 3)
+                    LatencyWorst = 0 if str(temp[p_id][key]["LatencyWorst"]) == '' else str(temp[p_id][key]["LatencyWorst"])
+                    syn_rslt_summary[p_id]['latency'] = str(LatencyWorst)
+                    exec_us = (float(LatencyWorst)) * float(temp[p_id]["Timing"]["Target"]) / pow(10, 3)
                     syn_rslt_summary[p_id]['exec us'] = str(round(exec_us, 2))
                     syn_rslt_summary[p_id]['clock period'] = float(temp[p_id]["Timing"]["Target"])
                     syn_rslt_summary[p_id]['Timing'] = float(temp[p_id]["Timing"]["Estimate"])

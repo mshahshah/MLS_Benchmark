@@ -1,13 +1,16 @@
 # tree format
 design:
-  top_function: adpcm_main
+  top_function: float64_div
   dataflow: False
 
   source_files:
-      - adpcm.c
+      - softfloat.c
+      - softfloat.h
+      - milieu.h
+      - SPARC-GCC.h
 
   tb_files:
-      - 
+      - dfdiv.c
       
 design_variable_types:
   in_t: 16
