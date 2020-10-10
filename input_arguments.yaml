@@ -2,16 +2,17 @@
 design_setting:
     topmodule: "dnn_LeNet"
     design_model : 'ave_8'
+    #design_model : 'adpcm'
 
     solution_name: "ip_test"
     create_ip: True
-    run_vivado_synthesize: True
-    run_vivado_power_analyzer: True
+    run_vivado_synthesize: False
+    run_vivado_power_analyzer: False
     vivado_version: vitis
     syn_label: any
 
     DSE_setting:
-        solution_counts: 2
+        solution_counts: 3
         max_parallel_syn: 1
         dse_name: unknown
         directive_selection: random
