@@ -1,8 +1,12 @@
 # tree format
 design_setting:
-    topmodule: "dnn_LeNet"
-    #design_model : 'ave_8'
-    design_model : 'adpcm'
+    design_model : 'ave_8'
+    #design_model : 'adpcm'
+    #design_model : 'dfadd'
+    #design_model : 'dfdiv'
+    #design_model : 'dfsin'
+    #design_model : 'matrix_mult'
+    #design_model : 'blowfish_new'
 
     solution_name: "ip_test"
     #run_vivado_synthesize: True
@@ -27,6 +31,5 @@ design_setting:
 FPGA:
     chip: VC707
     clock_period : 8
-    dsp_max: 2000
 
 

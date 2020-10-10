@@ -131,7 +131,6 @@ class configure_design:
         files['synLogFile'] = os.path.join(paths['solution'] , '{}.log'.format(self.cfg.design_setting.solution_name))
         files['SolutionFile'] = os.path.join(paths['solution'], '{}_data.json'.format(self.cfg.design_setting.solution_name))
         files['DirectiveFile'] = os.path.join(paths['solution'], 'directives.tcl')
-        files['TopModuleRptFile'] = os.path.join(paths['solution'],'syn','report','{}_csynth.rpt'.format(self.cfg.design_setting.topmodule))
         files['user_defined_arguments'] = os.path.join( 'input_arguments.yaml')
         files['user_defined_layers'] = os.path.join(paths['src'],'user_defined_layers.yaml')
         self.paths = Struct(**paths)
