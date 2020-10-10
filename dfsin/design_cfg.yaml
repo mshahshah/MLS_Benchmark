@@ -4,10 +4,14 @@ design:
   dataflow: False
 
   source_files:
-      - adpcm.c
+      - dfsin.c
+      - softfloat.c
+      - softfloat.h
+      - milieu.h
+      - SPARC-GCC.h
 
   tb_files:
-      - 
+      - dfsin_main.c
       
 design_variable_types:
   in_t: 16

@@ -1,13 +1,13 @@
 # tree format
 design:
-  top_function: adpcm_main
+  top_function: matrixmul
   dataflow: False
 
   source_files:
-      - adpcm.c
+      - matrixmul.cpp
 
   tb_files:
-      - 
+      - test.cpp
       
 design_variable_types:
   in_t: 16
