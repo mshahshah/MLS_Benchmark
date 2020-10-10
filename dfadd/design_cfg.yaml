@@ -1,0 +1,34 @@
+# tree format
+design:
+  top_function: float64_add
+  dataflow: False
+
+  source_files:
+      - softfloat.c
+      - SPARC-GCC.c
+      - softfloat.h
+      - softfloat.h
+
+  tb_files:
+      - dfadd.c
+      
+design_variable_types:
+  in_t: 16
+  ker_t: 16
+  res_t: 16
+  mid_t: 32
+  cfg_t: 16
+
+
+custom_pragma_list:
+
+
+best_pragma_list:
+
+minimal_pragma_list:
+
+
+
+base_pragma_list:
+
+none:

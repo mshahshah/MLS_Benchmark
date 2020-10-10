@@ -1,0 +1,33 @@
+# tree format
+design:
+  top_function: ave8
+  dataflow: False
+
+  source_files:
+      - ave8.c
+
+  tb_files:
+      - ave8_test.c
+
+design_variable_types:
+  in_t: 16
+  ker_t: 16
+  res_t: 16
+  mid_t: 32
+  cfg_t: 16
+
+
+
+
+custom_pragma_list:
+
+
+best_pragma_list:
+
+minimal_pragma_list:
+
+
+
+base_pragma_list:
+
+none:
