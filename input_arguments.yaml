@@ -1,32 +1,28 @@
 # tree format
 design_setting:
     topmodule: "dnn_LeNet"
-    design_model : 'ave_8'
-    #design_model : 'adpcm'
+    #design_model : 'ave_8'
+    design_model : 'adpcm'
 
     solution_name: "ip_test"
-    create_ip: True
+    #run_vivado_synthesize: True
+    #run_vivado_power_analyzer: True
     run_vivado_synthesize: False
     run_vivado_power_analyzer: False
     vivado_version: vitis
-    syn_label: any
 
-    DSE_setting:
-        solution_counts: 3
-        max_parallel_syn: 1
-        dse_name: unknown
-        directive_selection: random
-        #directive_selection: order
-        copy_bc_files: True
-        clock_range:
-            min: 80
-            max: 250
-            samples: 6
-        dtype_range:
-            in_t: [8,16,32]
-            ker_t: [8,12,16]
-            res_t: [16]
-            all_variables: [8,12,16,24,32]
+    solution_counts: 1
+    dse_name: unknown
+    copy_bc_files: True
+    clock_range:
+        min: 80
+        max: 250
+        samples: 6
+    dtype_range:
+        in_t: [8,16,32]
+        ker_t: [8,12,16]
+        res_t: [16]
+        all_variables: [8,12,16,24,32]
 
 FPGA:
     chip: VC707

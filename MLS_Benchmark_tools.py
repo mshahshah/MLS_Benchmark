@@ -126,19 +126,6 @@ class configure_design:
         paths['directive_list'] = os.path.join(paths['design_model'], 'directive_list')
         paths['src'] = os.path.join(paths['design_model'], 'src')
         paths['report'] = os.path.join(paths['design_model'], 'reports')
-        mode = '_'.join(self.options.mode.split('_')[0:2])
-        if mode == 'syn':
-            rpt_path_name = 'syn'
-        elif mode in ['dse_pragma']:
-            rpt_path_name = mode+ str(self.cfg.design_setting.DSE_setting['solution_counts']) +\
-                            self.cfg.design_setting.DSE_setting['directive_selection'] +\
-                            '_' + self.cfg.design_setting.DSE_setting['dse_name']
-        elif mode in ['dse_clock', 'dse_dtype']:
-            rpt_path_name = mode + '_' + self.cfg.design_setting.syn_directive_type +\
-                '_' + self.cfg.design_setting.DSE_setting['dse_name']
-        else:
-            rpt_path_name = 'unknown_report'
-
         paths['dse_report'] = os.path.join(paths['report'])
         paths['dse_figures'] = os.path.join(paths['dse_report'],  'figures')
         files['synLogFile'] = os.path.join(paths['solution'] , '{}.log'.format(self.cfg.design_setting.solution_name))
@@ -217,8 +204,6 @@ class hls_tools():
         tcl_lines.append('csynth_design')
         if self.cfg.design_setting.run_vivado_synthesize:
             tcl_lines.append('export_design -flow syn -rtl verilog -format ip_catalog')
-        elif self.cfg.design_setting.create_ip:
-            tcl_lines.append('export_design -format ip_catalog')
 
         tcl_lines.append('quit')
         filename = os.path.join(self.cfg.paths.design_model, "run_hls_syn.tcl")
@@ -459,7 +444,7 @@ class hls_tools():
 
 
     def copy_hls_bc_files(self, syn_path, sol_counter):
-        if self.cfg.design_setting.DSE_setting['copy_bc_files']:
+        if self.cfg.design_setting.copy_bc_files:
             temp = os.path.join(self.cfg.paths.dse_report, 'hls_syn{}'.format(sol_counter))
             os.mkdir(temp)
             bc_path = os.path.join(syn_path, '.autopilot', 'db')
@@ -470,47 +455,6 @@ class hls_tools():
             for file in glob.iglob(os.path.join(bc_path, '*.{}'.format('verbose.rpt'))):
                 shutil.copy2(file, temp)
 
-    def save_syn_records(self, syn_rslt, power, PR_syn_rslt, time):
-        record_file = os.path.join(self.cfg.paths.report, '{}'.format('syn_records'))
-        try:
-            with open(record_file+'.pickle', 'rb') as f:
-                previous_records = pickle.load(f)
-                print("Record file is updated.")
-        except IOError:
-            previous_records = []
-            print("Record file not exist! A new record file is created.")
-
-        record = {}
-        record['syntime'] = '{}:{}'.format(time[0], time[1])
-        record['hls_tool'] = self.cfg.design_setting.vivado_version
-        record['syn_label'] = self.cfg.design_setting.syn_label
-        record['power'] = str(power)
-        record['sol'] = self.cfg.design_setting.syn_directive_type
-        record['dataflow'] = self.cfg.design.dataflow
-
-        record.update(syn_rslt[self.cfg.design_setting.topmodule])
-        record.update(PR_syn_rslt)
-        previous_records.append(record)
-        with open(record_file+'.pickle', 'wb') as f:
-            pickle.dump(previous_records, f)
-        keys = previous_records[0].keys()
-        with open(record_file+'.csv', 'w', newline='') as output_file:
-            dict_writer = csv.DictWriter(output_file, keys)
-            dict_writer.writeheader()
-            dict_writer.writerows(previous_records)
-
-        txtlines = []
-        temp = ''
-        for i in previous_records[0].keys():
-            temp = temp + '{:^11} '.format(i)
-        txtlines.append(temp)
-        for rec in previous_records:
-            temp = ''
-            for i in rec.keys():
-                temp = temp + '{:^11} '.format(str(rec[i]))
-            txtlines.append(temp)
-        self.utils.save_list_to_file(record_file+'.txt', txtlines)
-
 
 class MLS_Benchmark():
     def __init__(self,cfg):
@@ -519,6 +463,9 @@ class MLS_Benchmark():
         self.utils = utils(cfg)
         with open(os.path.join('{}/compacted_tcl_files.pickle'.format(self.cfg.design_setting.design_model)), 'rb') as f:
             self.listOfDirectives = pickle.load(f)
+        self.available_sol = len(self.listOfDirectives)
+        self.max_sol = min(self.available_sol, self.cfg.design_setting.solution_counts)
+
 
 
 
@@ -539,7 +486,6 @@ class MLS_Benchmark():
         return solution_syn_list
 
     def load_a_directive_file(self, sol_counter):
-        selection_type = self.cfg.design_setting.DSE_setting['directive_selection']
         directive_name = 'untimate_new_directive{}.tcl'.format(sol_counter)
         srf_file = os.path.join(self.cfg.paths.directive_list,directive_name)
         shutil.copyfile(srf_file, self.cfg.files.DirectiveFile)
@@ -592,12 +538,7 @@ class MLS_Benchmark():
             print("PYTHON : DSE Skipped")
         else:
             solution_syn_list = []
-            total_dse_solutions = self.cfg.design_setting.DSE_setting['solution_counts']
-
-            if self.cfg.design_setting.DSE_setting['directive_selection'] == 'random':
-                selected_solutions = np.random.randint(0, 800, total_dse_solutions).tolist()
-            else:
-                selected_solutions = range(total_dse_solutions)
+            selected_solutions = np.random.randint(0, self.available_sol, self.max_sol).tolist()
 
             format = "%(asctime)s: %(message)s"
             logging.basicConfig(format=format, level=logging.INFO, datefmt="%H:%M:%S")
