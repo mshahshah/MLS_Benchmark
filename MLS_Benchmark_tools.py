@@ -35,11 +35,13 @@ def run_hls_syn(timeout, version, sol):
     proc = subprocess.Popen(command, shell=True)
     try:
         outs, errs = proc.communicate(timeout=timeout)
+        beep('syn')
         return True
     except TimeoutExpired:
         print("PYTHON: SYN STOPPED: The Synthesize could not complete within {} seconds !".format(timeout))
         kill_proc_tree(proc.pid, False)
         outs, errs = proc.communicate()
+        beep('failed')
         return False
 
 
@@ -570,6 +572,10 @@ class MLS_Benchmark():
             solution_syn_list.append(variable)
         return solution_syn_list
 
+    def updated_timeout_value(self, start_time):
+        syn_time = time.time() - start_time
+        self.cfg.design_setting.time_out_value = round(syn_time * 2)
+        print('The timeout is updated to {}'.format(self.cfg.design_setting.time_out_value))
 
 
     def run_dse_pragma(self, options):
@@ -598,8 +604,6 @@ class MLS_Benchmark():
                 os.chdir(self.cfg.paths.design_model)
 
                 if run_hls_syn(time_out_value, self.cfg.design_setting.vivado_version, sol):
-                    beep('syn')
-
                     [mm, ss] = self.utils.end_and_print_time(start_time)
                     temp, model_layers_name = self.hls_tools.read_parallel_syn_results(sol, [mm, ss], False)
                     print("PYTHON : DSE on pragmas: Synthesis of design {} is finished. Synthesis time : {:3d} Minutes and {:2d} Seconds"
@@ -619,6 +623,7 @@ class MLS_Benchmark():
                     self.utils.save_a_variable('hls_syn{}/solution_{}'.format(sol,sol), final_rpt)
                     solution_syn_list.append(final_rpt)
 
+                self.updated_timeout_value(start_time)
             [mm, ss] = self.utils.end_and_print_time(start_time)
             print("\nPYTHON : Total synthesis time : {:3d} Minutes and {:2d} Seconds".format(mm, ss))
 

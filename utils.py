@@ -23,6 +23,10 @@ def beep(type):
             time.sleep(0.05)
     elif type == 'impl':
         winsound.Beep(2000, 400)
+    elif type == 'failed':
+        for i in range(3):
+            winsound.Beep(1800, 60)
+            time.sleep(0.05)
     elif type == 'finish':
         for i in [5,4,3,2]:
             winsound.Beep(1000 + i*100, int(800/i))
