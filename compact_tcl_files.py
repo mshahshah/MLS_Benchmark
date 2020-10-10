@@ -14,12 +14,9 @@ def compact_tcl_files(source_path, cap_range):
         pickle.dump(listOfDirectives, f)
 
     print("All directives are save in {}".format(pickle_file))
-    #results += [each for each in os.listdir(source_path) if each.endswith('.tcl')]
-
-
 
 
 if __name__ == '__main__':
-    source_path = 'C:/Users/mxs161831/Box/HLS Benchmarks/designs_n_directives/dfsin'
-    cap_range = 500
+    source_path = 'C:/Users/mxs161831/Box/HLS Benchmarks/designs_n_directives/matrix_mult_2019'
+    cap_range = 100
     compact_tcl_files(source_path, cap_range)

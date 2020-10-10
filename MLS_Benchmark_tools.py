@@ -191,17 +191,6 @@ class hls_tools():
         self.utils = utils(cfg)
         #self.module['MOPS'] = {}
 
-        self.pragmas_dict = {
-            'unroll': 'set_directive_unroll         ',
-            'pipeline': 'set_directive_pipeline       ',
-            'dataflow': 'set_directive_dataflow       ',
-            'inline': 'set_directive_inline         ',
-            'partition': 'set_directive_array_partition',
-            'reshape': 'set_directive_array_reshape  ',
-            'interface': 'set_directive_interface      ',
-            'mul': 'set_directive_allocation     '
-        }
-
     def create_syn_tcl_file(self, clock_period):
         tcl_lines = []
         tcl_lines.append("############################################################")
@@ -471,14 +460,14 @@ class hls_tools():
 
     def copy_hls_bc_files(self, syn_path, sol_counter):
         if self.cfg.design_setting.DSE_setting['copy_bc_files']:
-            bc_report_path = os.path.join(self.cfg.paths.dse_report, 'bcfiles')
-            if not os.path.exists(bc_report_path):
-                os.mkdir(bc_report_path)
-            temp = os.path.join(bc_report_path, 'bc_sol{}'.format(sol_counter))
+            temp = os.path.join(self.cfg.paths.dse_report, 'hls_syn{}'.format(sol_counter))
             os.mkdir(temp)
             bc_path = os.path.join(syn_path, '.autopilot', 'db')
-            files = glob.iglob(os.path.join(bc_path, '*.{}'.format('bc')))
-            for file in files:
+            for file in glob.iglob(os.path.join(bc_path, 'a.o.3.bc')):
+                shutil.copy2(file, temp)
+            for file in glob.iglob(os.path.join(bc_path, '*.{}'.format('verbose.bind.rpt'))):
+                shutil.copy2(file, temp)
+            for file in glob.iglob(os.path.join(bc_path, '*.{}'.format('verbose.rpt'))):
                 shutil.copy2(file, temp)
 
     def save_syn_records(self, syn_rslt, power, PR_syn_rslt, time):
@@ -528,6 +517,9 @@ class MLS_Benchmark():
         self.cfg = cfg
         self.hls_tools = hls_tools(cfg)
         self.utils = utils(cfg)
+        with open(os.path.join('{}/compacted_tcl_files.pickle'.format(self.cfg.design_setting.design_model)), 'rb') as f:
+            self.listOfDirectives = pickle.load(f)
+
 
 
     def read_dse_syn_results(self, syn_exec_time, print_out = False):
@@ -546,41 +538,16 @@ class MLS_Benchmark():
                 print("PYTHON : can't open {} file".format(file))
         return solution_syn_list
 
-    def load_a_directive(self, sol_counter):
+    def load_a_directive_file(self, sol_counter):
         selection_type = self.cfg.design_setting.DSE_setting['directive_selection']
         directive_name = 'untimate_new_directive{}.tcl'.format(sol_counter)
         srf_file = os.path.join(self.cfg.paths.directive_list,directive_name)
         shutil.copyfile(srf_file, self.cfg.files.DirectiveFile)
 
-    def parallel_dse_pragma(self, sol_counter):
-        target_solution = self.selected_solutions[sol_counter]
-        syn_path = os.path.join(self.cfg.paths.design_model, 'hls', self.cfg.design_setting.solution_name)
-        start_time = self.utils.record_time()
-        now = datetime.now()
-        dt_string = now.strftime("%d/%m/%Y %H:%M:%S")
-        print("PYTHON : DSE on pragmas: Synthesis of design {} is started at {}.".format(sol_counter, dt_string))
-        self.load_a_directive(sol_counter)
-        self.hls_tools.create_syn_tcl_file(clock_period=self.cfg.FPGA.clock_period)
-        os.chdir(self.cfg.paths.design_model)
-        if self.cfg.design_setting.vivado_version == 'vitis':
-            os.system("vitis_hls -f run_hls_syn.tcl {} > {}/syn_report{}.log"
-                      .format(target_solution, self.cfg.paths.dse_report, target_solution))
-        else:
-            os.system("vivado_hls -f run_hls_syn.tcl {} > syn_report{}.log".format(sol_counter, sol_counter))
-
-        beep('syn')
-        self.copy_solution_files(syn_path, self.cfg.design_setting.DSE_setting['dse_name'], sol_counter)
-        self.hls_tools.copy_hls_bc_files(syn_path, sol_counter)
-
-        [mm, ss] = self.utils.end_and_print_time(start_time)
-        temp, model_layers_name =  self.hls_tools.read_parallel_syn_results(sol_counter, [mm, ss], False)
-        temp['dtype'] = '{} bits'.format(self.cfg.design_variable_types['ker_t'])
-        temp['power'] = self.hls_tools.read_single_syn_results(sol_counter, 'syn', print_out='silent', clean=True)
-        print("PYTHON : DSE on pragmas: Synthesis of design {} is finished. Synthesis time : {:3d} Minutes and {:2d} Seconds"
-              .format(sol_counter, mm, ss))
-        os.chdir(self.cfg.paths.design_top)
-        self.utils.save_a_variable('solution_{}'.format(sol_counter), temp)
-        return temp, model_layers_name
+    def load_a_directive_list(self, sol_counter):
+        direcitves = self.listOfDirectives[sol_counter]
+        self.utils.save_list_to_file(self.cfg.files.DirectiveFile,direcitves)
+        return direcitves
 
     def create_dse_excel_report(self, design_solutions,  sort1_by='latency', sort2_by='DSP'):
         design_solutions_passed = []
@@ -591,10 +558,10 @@ class MLS_Benchmark():
         filename = os.path.join(self.cfg.paths.dse_report, "dse_{}.csv".format(top_function))
         sorted_solutions = sorted(design_solutions_passed, key=lambda x: (float(x[top_function][sort1_by]),int(x[top_function][sort2_by])))
 
-        labels_list = list(sorted_solutions[0]['ave8'].keys())
-
+        labels_list = list(sorted_solutions[0][self.cfg.design.top_function].keys())
+        labels_list2 = ['solution', 'syn_status', 'syn_time', 'power', 'dtype', 'LUT_PS', 'FF_PS', 'DSP_PS', 'BRAM_PS', 'Timing_PS']
         f = open(filename, "w+")
-        for item in list(sorted_solutions[0].keys())[1:]:
+        for item in labels_list2:
             f.write('{},'.format(item))
         for item in labels_list:
             f.write(item + ',')
@@ -606,7 +573,7 @@ class MLS_Benchmark():
                 f.write(solution['syn_status'] + ',')
                 f.write(solution['syn_time'] + ',')
             else:
-                for i in list(solution.keys())[1:]:
+                for i in labels_list2:
                     f.write(str(solution[i]) + ',')
                 for key in labels_list:
                     if key in solution[top_function]:
@@ -628,7 +595,7 @@ class MLS_Benchmark():
             total_dse_solutions = self.cfg.design_setting.DSE_setting['solution_counts']
 
             if self.cfg.design_setting.DSE_setting['directive_selection'] == 'random':
-                selected_solutions = np.random.randint(0, 20, total_dse_solutions).tolist()
+                selected_solutions = np.random.randint(0, 800, total_dse_solutions).tolist()
             else:
                 selected_solutions = range(total_dse_solutions)
 
@@ -641,33 +608,41 @@ class MLS_Benchmark():
                 start_time = self.utils.record_time()
                 now = datetime.now()
                 dt_string = now.strftime("%d/%m/%Y %H:%M:%S")
-                print("PYTHON : DSE on pragmas: Synthesis of design {} is started at {}.".format(sol, dt_string))
-                self.load_a_directive(sol)
+                print("\nPYTHON : DSE on pragmas: Synthesis of design {} is started at {}.".format(sol, dt_string))
+                #self.load_a_directive_file(sol)
+                pragmas = self.load_a_directive_list(sol)
                 self.hls_tools.create_syn_tcl_file(clock_period=self.cfg.FPGA.clock_period)
                 os.chdir(self.cfg.paths.design_model)
                 if self.cfg.design_setting.vivado_version == 'vitis':
-                    os.system("vitis_hls -f run_hls_syn.tcl {} > reports/syn_report{}.log".format(sol, sol))
+                    os.system("vitis_hls -f run_hls_syn.tcl {} > syn_report.log".format(sol))
                 else:
-                    os.system("vivado_hls -f run_hls_syn.tcl {} > reports/syn_report{}.log".format(sol, sol))
+                    os.system("vivado_hls -f run_hls_syn.tcl {} > syn_report.log".format(sol))
 
                 beep('syn')
-                #self.copy_solution_files(syn_path, self.cfg.design_setting.DSE_setting['dse_name'], sol)
-                self.hls_tools.copy_hls_bc_files(syn_path, sol)
 
                 [mm, ss] = self.utils.end_and_print_time(start_time)
                 temp, model_layers_name = self.hls_tools.read_parallel_syn_results(sol, [mm, ss], False)
-                temp.update(self.hls_tools.run_power_analyzer(sol, 'syn', print_out='silent', clean=True))
-                temp['dtype'] = '{} bits'.format('NA')
                 print("PYTHON : DSE on pragmas: Synthesis of design {} is finished. Synthesis time : {:3d} Minutes and {:2d} Seconds"
                     .format(sol, mm, ss))
+
+                postSyn = self.hls_tools.run_power_analyzer(sol, 'syn', print_out='silent', clean=True)
+
+                self.hls_tools.copy_hls_bc_files(syn_path, sol)
+
                 os.chdir(self.cfg.paths.design_top)
-                self.utils.save_a_variable('solution_{}'.format(sol), temp)
-                solution_syn_list.append(temp)
+
+                final_rpt = {}
+                final_rpt.update(temp)
+                final_rpt.update(postSyn)
+                final_rpt['dtype'] = '{} bits'.format('NA')
+                final_rpt['pragmas'] = pragmas
+                self.utils.save_a_variable('hls_syn{}/solution_{}'.format(sol,sol), final_rpt)
+                solution_syn_list.append(final_rpt)
 
             self.utils.save_a_variable('dse_pragma_results', solution_syn_list)
             #self.remove_all_synthesize_results(total_dse_solutions)
             [mm, ss] = self.utils.end_and_print_time(start_time)
-            print("PYTHON : Total synthesis time : {:3d} Minutes and {:2d} Seconds".format(mm, ss))
+            print("PYTHON : Total synthesis time : {:3d} Minutes and {:2d} Seconds\n".format(mm, ss))
         return solution_syn_list
 
 
