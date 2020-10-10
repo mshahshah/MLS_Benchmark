@@ -1,23 +1,24 @@
 # tree format
 design_setting:
     #design_model : 'ave_8'
-    design_model : 'adpcm'
+    #design_model : 'adpcm'
     #design_model : 'dfadd'
     #design_model : 'dfdiv'
     #design_model : 'dfsin'
-    #design_model : 'matrix_mult'
+    design_model : 'matrix_mult'
     #design_model : 'blowfish_new'
 
     solution_name: "ip_test"
-    run_vivado_synthesize: True
-    run_vivado_power_analyzer: True
-    #run_vivado_synthesize: False
-    #run_vivado_power_analyzer: False
+    #run_vivado_synthesize: True
+    #run_vivado_power_analyzer: True
+    run_vivado_synthesize: False
+    run_vivado_power_analyzer: False
     vivado_version: vitis
 
-    solution_counts: 200
-    dse_name: unknown
+    solution_counts: 4
+    dse_name: unknown2
     copy_bc_files: True
+    time_out_value: 30
     clock_range:
         min: 80
         max: 250
