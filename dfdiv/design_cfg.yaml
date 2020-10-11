@@ -1,16 +1,17 @@
 # tree format
 design:
-  top_function: float64_div
+  top_function: local_sin
   dataflow: False
 
   source_files:
+      - dfsin.c
       - softfloat.c
       - softfloat.h
       - milieu.h
       - SPARC-GCC.h
 
   tb_files:
-      - dfdiv.c
+      - dfsin_main.c
       
 design_variable_types:
   in_t: 16
