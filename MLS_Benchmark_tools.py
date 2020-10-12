@@ -193,9 +193,9 @@ class configure_design:
             if self.options.mode not in ['syn']:
                 if os.path.exists(self.cfg.paths.dse_report):
                     print("PYTHON : The report folder exist. Do you want to remove previous work? (yes/no) ")
-                    #if input().lower() == 'yes':
-                    shutil.rmtree(self.cfg.paths.dse_report)
-                    os.makedirs(self.cfg.paths.dse_report)
+                    if input().lower() == 'yes':
+                        shutil.rmtree(self.cfg.paths.dse_report)
+                        os.makedirs(self.cfg.paths.dse_report)
                 else:
                     os.makedirs(self.cfg.paths.dse_report)
 
@@ -499,6 +499,7 @@ class MLS_Benchmark():
             self.listOfDirectives = pickle.load(f)
         self.available_sol = len(self.listOfDirectives)
         self.max_sol = min(self.available_sol, self.cfg.design_setting.solution_counts)
+        self.first_timeout_setting = False
 
 
 
@@ -574,8 +575,10 @@ class MLS_Benchmark():
 
     def updated_timeout_value(self, start_time):
         syn_time = time.time() - start_time
-        self.cfg.design_setting.time_out_value = round(syn_time * 2)
-        print('The timeout is updated to {}'.format(self.cfg.design_setting.time_out_value))
+        if not self.first_timeout_setting:
+            self.first_timeout_setting = True
+            self.cfg.design_setting.time_out_value = round(syn_time * 2)
+            print('The timeout is updated to {}'.format(self.cfg.design_setting.time_out_value))
 
 
     def run_dse_pragma(self, options):
