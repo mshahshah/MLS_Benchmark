@@ -272,7 +272,6 @@ class hls_tools():
 
         if (sr != 0):
             print("PYTHON : run_power_analyzer file not found, or a problem in bash file!")
-            return 'Er'
 
         [mm, ss] = self.utils.end_and_print_time(start_time)
 
@@ -353,8 +352,6 @@ class hls_tools():
             print('Post Syn hardware utilization : ', PR_results)
         except:
             PR_results = {'LUT_PS': 'NF', 'FF_PS': 'NF', 'DSP_PS': 'NF', 'BRAM_PS': 'NF', 'Timing_PS':'NF','power': 'NF'}
-
-
         return  PR_results
 
 
@@ -577,7 +574,7 @@ class MLS_Benchmark():
         syn_time = time.time() - start_time
         if not self.first_timeout_setting:
             self.first_timeout_setting = True
-            self.cfg.design_setting.time_out_value = round(syn_time * 2)
+            self.cfg.design_setting.time_out_value = round(syn_time * 1.5)
             print('The timeout is updated to {}'.format(self.cfg.design_setting.time_out_value))
 
 
